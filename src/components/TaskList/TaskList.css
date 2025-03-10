@@ -1,0 +1,14 @@
+.task-list {
+  list-style-type: none;
+}
+
+.empty-message {
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+  color: #888;
+}
+
+.empty-message.dark-text {
+  color: #aaa;
+}
