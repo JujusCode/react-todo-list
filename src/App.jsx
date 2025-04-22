@@ -5,29 +5,37 @@ import FilterButtons from "./components/FilterButtons/FilterButtons";
 import TaskList from "./components/TaskList/TaskList";
 import DarkModeToggle from "./components/DarkModeToggle/DarkModeToggle";
 
+const API_BASE = "http://localhost/todo-api";
+
 const App = () => {
-  const [tasks, setTasks] = useState(() => {
-    const savedTasks = localStorage.getItem("tasks");
-    return savedTasks
-      ? JSON.parse(savedTasks)
-      : [
-          { id: 1, text: "Learn React Hooks", completed: false },
-          { id: 2, text: "Build a todo app", completed: false },
-          { id: 3, text: "Master React", completed: false },
-        ];
-  });
-
+  const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState("all");
-
   const [darkMode, setDarkMode] = useState(() => {
     const savedMode = localStorage.getItem("darkMode");
     return savedMode ? JSON.parse(savedMode) : false;
   });
 
+  // Fetch tasks from PHP API on component mount
   useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-  }, [tasks]);
+    const fetchTasks = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/read.php`);
+        const data = await response.json();
+        setTasks(
+          data.map((task) => ({
+            id: task.id,
+            text: task.title,
+            completed: task.completed,
+          }))
+        );
+      } catch (error) {
+        console.error("Error fetching tasks:", error);
+      }
+    };
+    fetchTasks();
+  }, []);
 
+  // Dark mode handling (kept in localStorage)
   useEffect(() => {
     localStorage.setItem("darkMode", JSON.stringify(darkMode));
     if (darkMode) {
@@ -37,37 +45,106 @@ const App = () => {
     }
   }, [darkMode]);
 
-  const addTask = (text) => {
+  const addTask = async (text) => {
     if (text.trim() !== "") {
-      const newTaskItem = {
-        id: Date.now(),
-        text: text,
-        completed: false,
-      };
-      setTasks([...tasks, newTaskItem]);
+      try {
+        const response = await fetch(`${API_BASE}/create.php`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ title: text, completed: false }),
+        });
+
+        // Add logging to see what's coming back
+        const responseData = await response.json();
+        console.log("Response from create.php:", responseData);
+
+        // Check if we got a successful response
+        if (response.ok) {
+          // Use the id from the response
+          setTasks([
+            ...tasks,
+            {
+              id: responseData.id, // Get id from the response
+              text: text,
+              completed: false,
+            },
+          ]);
+        } else {
+          // Handle server error
+          console.error("Server error:", responseData.message);
+          alert("Error adding task: " + responseData.message);
+        }
+      } catch (error) {
+        console.error("Error adding task:", error);
+        alert("Failed to add task. Check console for details.");
+      }
     }
   };
 
-  const deleteTask = (id) => {
-    setTasks(tasks.filter((task) => task.id !== id));
+  const deleteTask = async (id) => {
+    try {
+      await fetch(`${API_BASE}/delete.php`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: id }),
+      });
+      setTasks(tasks.filter((task) => task.id !== id));
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
   };
 
-  const editTask = (id, newText) => {
+  const editTask = async (id, newText) => {
     if (newText.trim() !== "") {
+      try {
+        await fetch(`${API_BASE}/update.php`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: id,
+            title: newText,
+            completed: tasks.find((task) => task.id === id).completed,
+          }),
+        });
+        setTasks(
+          tasks.map((task) =>
+            task.id === id ? { ...task, text: newText } : task
+          )
+        );
+      } catch (error) {
+        console.error("Error editing task:", error);
+      }
+    }
+  };
+
+  const toggleComplete = async (id) => {
+    const taskToUpdate = tasks.find((task) => task.id === id);
+    try {
+      await fetch(`${API_BASE}/update.php`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: id,
+          title: taskToUpdate.text,
+          completed: !taskToUpdate.completed,
+        }),
+      });
       setTasks(
         tasks.map((task) =>
-          task.id === id ? { ...task, text: newText } : task
+          task.id === id ? { ...task, completed: !task.completed } : task
         )
       );
+    } catch (error) {
+      console.error("Error toggling task completion:", error);
     }
-  };
-
-  const toggleComplete = (id) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    );
   };
 
   const filteredTasks = tasks.filter((task) => {
